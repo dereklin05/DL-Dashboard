@@ -4,7 +4,8 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: "DL's Dashboard",
-  description: 'A personal operating system for your health, schedule, finances, markets, and daily briefing.',
+  description:
+    'A personal operating system for your health, schedule, finances, markets, and daily briefing.',
   generator: 'v0.app',
   icons: {
     icon: [
