@@ -136,9 +136,9 @@ async function markets() {
       .split(',')
       .map((symbol) => symbol.trim())
       .filter(Boolean)
-      .slice(0, 20)
-    const quotes = await Promise.all(
-      symbols.map(async (symbol) => {
+    const visibleSymbols = symbols.slice(0, 8)
+    const results = await Promise.allSettled(
+      visibleSymbols.map(async (symbol) => {
         const params = new URLSearchParams({ symbol, apikey: apiKey })
         const response = await fetch(
           `https://api.twelvedata.com/quote?${params}`,
@@ -164,9 +164,32 @@ async function markets() {
         }
       }),
     )
+    const quotes = results.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : [],
+    )
+    const unavailableSymbols = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [
+            {
+              symbol: visibleSymbols[index],
+              error:
+                result.reason instanceof Error
+                  ? result.reason.message
+                  : 'Quote unavailable',
+            },
+          ]
+        : [],
+    )
+    if (!quotes.length)
+      throw new Error(
+        unavailableSymbols[0]?.error || 'No market quotes are available',
+      )
     return {
       available: true,
       quotes,
+      unavailableSymbols,
+      configuredSymbols: symbols.length,
+      limited: symbols.length > visibleSymbols.length,
     }
   } catch (error) {
     return unavailable(

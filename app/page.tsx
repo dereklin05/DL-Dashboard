@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   ArrowDownRight,
   ArrowUpRight,
   CalendarDays,
+  Check,
   ChevronDown,
   ChevronRight,
   CircleDollarSign,
@@ -31,7 +32,8 @@ import {
   Zap,
 } from 'lucide-react'
 
-type Theme = 'dark' | 'light' | 'oled' | 'neon' | 'sunset' | 'forest'
+type Theme =
+  'dark' | 'light' | 'oled' | 'neon' | 'sunset' | 'forest' | 'rose-pine'
 type WidgetId =
   'readiness' | 'calendar' | 'markets' | 'expenses' | 'briefing' | 'weather'
 type Widget = {
@@ -59,6 +61,8 @@ type Data = {
   markets?: {
     available: boolean
     quotes?: { symbol: string; price?: string; change_ratio?: string }[]
+    configuredSymbols?: number
+    limited?: boolean
   }
   expenses?: {
     available: boolean
@@ -88,6 +92,15 @@ type LocalTransaction = {
   amount_cents: number
 }
 const expenseStorageKey = 'dl-dashboard-minus-transactions'
+const themes: Array<{ value: Theme; label: string; swatch: string }> = [
+  { value: 'dark', label: 'Midnight', swatch: '#c8f36a' },
+  { value: 'light', label: 'Daylight', swatch: '#639e34' },
+  { value: 'oled', label: 'OLED black', swatch: '#050505' },
+  { value: 'neon', label: 'Cyberpunk', swatch: '#c392ff' },
+  { value: 'sunset', label: 'Sunset pastel', swatch: '#ee9fae' },
+  { value: 'forest', label: 'Forest', swatch: '#76b89e' },
+  { value: 'rose-pine', label: 'Rosé Pine', swatch: '#c4a7e7' },
+]
 const initial: Widget[] = [
   ['readiness', 'Health'],
   ['calendar', 'Schedule'],
@@ -151,12 +164,14 @@ export default function Home() {
     [widgets, setWidgets] = useState(initial),
     [customizing, setCustomizing] = useState(false),
     [maximized, setMaximized] = useState<WidgetId | null>(null),
+    [themeMenuOpen, setThemeMenuOpen] = useState(false),
     [data, setData] = useState<Data | null>(null),
     [localTransactions, setLocalTransactions] = useState<LocalTransaction[]>(
       [],
     ),
     [error, setError] = useState(''),
     [importNote, setImportNote] = useState('')
+  const themeMenuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(expenseStorageKey) ?? '[]')
@@ -172,6 +187,14 @@ export default function Home() {
       .catch((e) =>
         setError(typeof e === 'string' ? e : 'Live data is unavailable'),
       )
+  }, [])
+  useEffect(() => {
+    const closeMenu = (event: MouseEvent) => {
+      if (!themeMenuRef.current?.contains(event.target as Node))
+        setThemeMenuOpen(false)
+    }
+    document.addEventListener('mousedown', closeMenu)
+    return () => document.removeEventListener('mousedown', closeMenu)
   }, [])
   const today = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -242,6 +265,7 @@ export default function Home() {
   }
   const frame = (widget: Widget, content: React.ReactNode) => (
     <article
+      key={widget.id}
       className={`widget widget-${widget.id} ${widget.collapsed ? 'is-collapsed' : ''} ${maximized === widget.id ? 'is-maximized' : ''}`}
     >
       <div className="widget-actions">
@@ -281,18 +305,44 @@ export default function Home() {
             <span className="live-dot" /> <span>{today}</span>
             <b>{data ? 'Live' : 'Loading'}</b>
           </div>
-          <div className="theme-control">
-            <Sun size={15} />
-            <select
-              value={theme}
-              onChange={(e) => setTheme(e.target.value as Theme)}
+          <div className="theme-menu" ref={themeMenuRef}>
+            <button
+              className="theme-trigger"
+              onClick={() => setThemeMenuOpen((open) => !open)}
+              aria-haspopup="listbox"
+              aria-expanded={themeMenuOpen}
             >
-              {(
-                ['dark', 'light', 'oled', 'neon', 'sunset', 'forest'] as Theme[]
-              ).map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
+              <Sun size={15} />
+              <span>{themes.find((item) => item.value === theme)?.label}</span>
+              <ChevronDown
+                size={13}
+                className={themeMenuOpen ? 'rotate-180' : ''}
+              />
+            </button>
+            {themeMenuOpen && (
+              <div
+                className="theme-dropdown"
+                role="listbox"
+                aria-label="Choose dashboard theme"
+              >
+                {themes.map((item) => (
+                  <button
+                    key={item.value}
+                    className={`theme-option ${theme === item.value ? 'selected' : ''}`}
+                    role="option"
+                    aria-selected={theme === item.value}
+                    onClick={() => {
+                      setTheme(item.value)
+                      setThemeMenuOpen(false)
+                    }}
+                  >
+                    <i style={{ backgroundColor: item.swatch }} />
+                    <span>{item.label}</span>
+                    {theme === item.value && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -305,9 +355,9 @@ export default function Home() {
           <button className="side-link">
             <Activity size={16} /> Health & recovery
           </button>
-          <button className="side-link">
+          <a className="side-link" href="/markets">
             <TrendingUp size={16} /> Markets
-          </button>
+          </a>
           <button className="side-link">
             <CalendarDays size={16} /> Calendar
           </button>
@@ -506,35 +556,48 @@ export default function Home() {
                     />
                     {!widget.collapsed &&
                       (quotes.length ? (
-                        <div className="market-list">
-                          {quotes.map((q) => {
-                            const c = Number(q.change_ratio ?? 0)
-                            return (
-                              <div className="market-row" key={q.symbol}>
-                                <div className="ticker-logo">{q.symbol[0]}</div>
-                                <div className="market-name">
-                                  <strong>{q.symbol}</strong>
-                                  <span>Twelve Data quote</span>
+                        <>
+                          <div className="market-list">
+                            {quotes.map((q) => {
+                              const c = Number(q.change_ratio ?? 0)
+                              return (
+                                <div className="market-row" key={q.symbol}>
+                                  <div className="ticker-logo">
+                                    {q.symbol[0]}
+                                  </div>
+                                  <div className="market-name">
+                                    <strong>{q.symbol}</strong>
+                                    <span>Twelve Data quote</span>
+                                  </div>
+                                  <div className="market-price">
+                                    <strong>
+                                      ${Number(q.price ?? 0).toFixed(2)}
+                                    </strong>
+                                    <span
+                                      className={
+                                        c >= 0 ? 'positive' : 'negative'
+                                      }
+                                    >
+                                      {c >= 0 ? (
+                                        <ArrowUpRight size={13} />
+                                      ) : (
+                                        <ArrowDownRight size={13} />
+                                      )}
+                                      {(c * 100).toFixed(2)}%
+                                    </span>
+                                  </div>
                                 </div>
-                                <div className="market-price">
-                                  <strong>
-                                    ${Number(q.price ?? 0).toFixed(2)}
-                                  </strong>
-                                  <span
-                                    className={c >= 0 ? 'positive' : 'negative'}
-                                  >
-                                    {c >= 0 ? (
-                                      <ArrowUpRight size={13} />
-                                    ) : (
-                                      <ArrowDownRight size={13} />
-                                    )}
-                                    {(c * 100).toFixed(2)}%
-                                  </span>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
+                              )
+                            })}
+                          </div>
+                          {data?.markets?.limited && (
+                            <Empty>
+                              Showing the first 8 of{' '}
+                              {data.markets.configuredSymbols} symbols to stay
+                              within your Twelve Data plan limit.
+                            </Empty>
+                          )}
+                        </>
                       ) : (
                         <Empty>
                           Add your Twelve Data API key to .env.local.
