@@ -23,8 +23,19 @@ async function googleAccessToken(refreshToken?: string) {
       grant_type: 'refresh_token',
     }),
   })
-  if (!response.ok) throw new Error('Google token refresh failed')
-  const body = (await response.json()) as { access_token?: string }
+  const body = (await response.json()) as {
+    access_token?: string
+    error?: string
+    error_description?: string
+  }
+  if (!response.ok) {
+    const reason = [body.error, body.error_description]
+      .filter(Boolean)
+      .join(': ')
+    throw new Error(
+      `Google token refresh failed${reason ? ` (${reason})` : ''}`,
+    )
+  }
   if (!body.access_token)
     throw new Error('Google did not return an access token')
   return body.access_token

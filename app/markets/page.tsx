@@ -8,6 +8,7 @@ import {
   RefreshCw,
   TrendingUp,
 } from 'lucide-react'
+import { ThemeMenu, useDashboardTheme } from '@/components/theme-menu'
 
 type Quote = {
   symbol: string
@@ -37,6 +38,7 @@ const percent = new Intl.NumberFormat('en-US', {
 })
 
 export default function MarketsPage() {
+  const { theme, setTheme } = useDashboardTheme()
   const [data, setData] = useState<MarketData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -79,7 +81,7 @@ export default function MarketsPage() {
     : '—'
 
   return (
-    <main className="dashboard theme-dark">
+    <main className={`dashboard theme-${theme}`}>
       <header className="topbar">
         <a className="brand" href="/">
           <div className="brand-mark">
@@ -94,6 +96,7 @@ export default function MarketsPage() {
           <span className="date-chip">
             <span className="live-dot" /> Updated {updated}
           </span>
+          <ThemeMenu theme={theme} onThemeChange={setTheme} />
           <button className="edit-button" onClick={load} disabled={loading}>
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />{' '}
             Refresh

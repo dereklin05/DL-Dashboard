@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ThemeMenu, useDashboardTheme } from '@/components/theme-menu'
 import {
   Activity,
   ArrowDownRight,
   ArrowUpRight,
   CalendarDays,
-  Check,
   ChevronDown,
   ChevronRight,
   CircleDollarSign,
@@ -32,8 +32,6 @@ import {
   Zap,
 } from 'lucide-react'
 
-type Theme =
-  'dark' | 'light' | 'oled' | 'neon' | 'sunset' | 'forest' | 'rose-pine'
 type WidgetId =
   'readiness' | 'calendar' | 'markets' | 'expenses' | 'briefing' | 'weather'
 type Widget = {
@@ -92,15 +90,6 @@ type LocalTransaction = {
   amount_cents: number
 }
 const expenseStorageKey = 'dl-dashboard-minus-transactions'
-const themes: Array<{ value: Theme; label: string; swatch: string }> = [
-  { value: 'dark', label: 'Midnight', swatch: '#c8f36a' },
-  { value: 'light', label: 'Daylight', swatch: '#639e34' },
-  { value: 'oled', label: 'OLED black', swatch: '#050505' },
-  { value: 'neon', label: 'Cyberpunk', swatch: '#c392ff' },
-  { value: 'sunset', label: 'Sunset pastel', swatch: '#ee9fae' },
-  { value: 'forest', label: 'Forest', swatch: '#76b89e' },
-  { value: 'rose-pine', label: 'Rosé Pine', swatch: '#c4a7e7' },
-]
 const initial: Widget[] = [
   ['readiness', 'Health'],
   ['calendar', 'Schedule'],
@@ -160,18 +149,16 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 export default function Home() {
-  const [theme, setTheme] = useState<Theme>('dark'),
-    [widgets, setWidgets] = useState(initial),
+  const { theme, setTheme } = useDashboardTheme()
+  const [widgets, setWidgets] = useState(initial),
     [customizing, setCustomizing] = useState(false),
     [maximized, setMaximized] = useState<WidgetId | null>(null),
-    [themeMenuOpen, setThemeMenuOpen] = useState(false),
     [data, setData] = useState<Data | null>(null),
     [localTransactions, setLocalTransactions] = useState<LocalTransaction[]>(
       [],
     ),
     [error, setError] = useState(''),
     [importNote, setImportNote] = useState('')
-  const themeMenuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(expenseStorageKey) ?? '[]')
@@ -187,14 +174,6 @@ export default function Home() {
       .catch((e) =>
         setError(typeof e === 'string' ? e : 'Live data is unavailable'),
       )
-  }, [])
-  useEffect(() => {
-    const closeMenu = (event: MouseEvent) => {
-      if (!themeMenuRef.current?.contains(event.target as Node))
-        setThemeMenuOpen(false)
-    }
-    document.addEventListener('mousedown', closeMenu)
-    return () => document.removeEventListener('mousedown', closeMenu)
   }, [])
   const today = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -305,45 +284,7 @@ export default function Home() {
             <span className="live-dot" /> <span>{today}</span>
             <b>{data ? 'Live' : 'Loading'}</b>
           </div>
-          <div className="theme-menu" ref={themeMenuRef}>
-            <button
-              className="theme-trigger"
-              onClick={() => setThemeMenuOpen((open) => !open)}
-              aria-haspopup="listbox"
-              aria-expanded={themeMenuOpen}
-            >
-              <Sun size={15} />
-              <span>{themes.find((item) => item.value === theme)?.label}</span>
-              <ChevronDown
-                size={13}
-                className={themeMenuOpen ? 'rotate-180' : ''}
-              />
-            </button>
-            {themeMenuOpen && (
-              <div
-                className="theme-dropdown"
-                role="listbox"
-                aria-label="Choose dashboard theme"
-              >
-                {themes.map((item) => (
-                  <button
-                    key={item.value}
-                    className={`theme-option ${theme === item.value ? 'selected' : ''}`}
-                    role="option"
-                    aria-selected={theme === item.value}
-                    onClick={() => {
-                      setTheme(item.value)
-                      setThemeMenuOpen(false)
-                    }}
-                  >
-                    <i style={{ backgroundColor: item.swatch }} />
-                    <span>{item.label}</span>
-                    {theme === item.value && <Check size={14} />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <ThemeMenu theme={theme} onThemeChange={setTheme} />
         </div>
       </header>
       <div className="dashboard-body">
