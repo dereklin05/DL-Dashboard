@@ -170,7 +170,78 @@ const durationSeconds = (start?: string, end?: string) => {
 const parseSeconds = (value?: string) =>
   value ? Number(value.replace(/s$/, '')) : undefined
 
-async function health() {
+type StravaActivity = {
+  id: number
+  name: string
+  type?: string
+  sport_type?: string
+  start_date?: string
+  moving_time?: number
+  calories?: number
+  distance?: number
+  average_speed?: number
+  average_heartrate?: number
+}
+
+async function stravaActivities(
+  refreshToken?: string,
+  onRefresh?: (token: string) => void,
+) {
+  const clientId = process.env.STRAVA_CLIENT_ID
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET
+  if (!clientId || !clientSecret || !refreshToken)
+    return { available: false, exercises: [] }
+  const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }),
+    cache: 'no-store',
+  })
+  if (!tokenResponse.ok) throw new Error('Strava token refresh failed')
+  const token = (await tokenResponse.json()) as {
+    access_token?: string
+    refresh_token?: string
+  }
+  if (!token.access_token)
+    throw new Error('Strava did not return an access token')
+  if (token.refresh_token && token.refresh_token !== refreshToken)
+    onRefresh?.(token.refresh_token)
+  const response = await fetch(
+    'https://www.strava.com/api/v3/athlete/activities?per_page=20',
+    {
+      headers: { authorization: `Bearer ${token.access_token}` },
+      cache: 'no-store',
+    },
+  )
+  if (!response.ok) throw new Error('Strava activity request failed')
+  const activities = (await response.json()) as StravaActivity[]
+  return {
+    available: true,
+    exercises: activities.map((activity) => ({
+      id: `strava-${activity.id}`,
+      name: activity.name,
+      type: activity.sport_type ?? activity.type,
+      start: activity.start_date,
+      durationSeconds: activity.moving_time,
+      calories: activity.calories,
+      distanceMeters: activity.distance,
+      paceSecondsPerKm: activity.average_speed
+        ? 1000 / activity.average_speed
+        : undefined,
+      averageHeartRate: activity.average_heartrate,
+    })),
+  }
+}
+
+async function health(
+  stravaRefreshToken?: string,
+  onStravaRefresh?: (token: string) => void,
+) {
   try {
     const token = await googleAccessToken(
       process.env.GOOGLE_HEALTH_REFRESH_TOKEN,
@@ -189,6 +260,42 @@ async function health() {
               Array<Record<string, unknown>> | undefined
           )?.at(-1) ?? null)
         : null
+    const googleExercises =
+      exercises.status === 'fulfilled'
+        ? (exercises.value.dataPoints ?? [])
+            .map((point) => {
+              const exercise = point.exercise
+              if (!exercise) return null
+              const metrics = exercise.metricsSummary
+              const start = exercise.interval?.startTime
+              const end = exercise.interval?.endTime
+              return {
+                id: point.name ?? `${start}-${exercise.displayName}`,
+                name:
+                  exercise.displayName ?? exercise.exerciseType ?? 'Workout',
+                type: exercise.exerciseType,
+                start,
+                end,
+                durationSeconds:
+                  parseSeconds(exercise.activeDuration) ??
+                  durationSeconds(start, end),
+                calories: metrics?.caloriesKcal,
+                distanceMeters:
+                  metrics?.distanceMillimiters ?? metrics?.distanceMillimeters,
+                paceSecondsPerKm: metrics?.averagePaceSecondsPerMeter
+                  ? metrics.averagePaceSecondsPerMeter * 1000
+                  : undefined,
+                averageHeartRate: metrics?.averageHeartRateBeatsPerMinute
+                  ? Number(metrics.averageHeartRateBeatsPerMinute)
+                  : undefined,
+              }
+            })
+            .filter(Boolean)
+        : []
+    const strava = await stravaActivities(
+      stravaRefreshToken,
+      onStravaRefresh,
+    ).catch(() => ({ available: false, exercises: [] }))
     return {
       available: true,
       steps: last(steps),
@@ -207,39 +314,9 @@ async function health() {
                 : null
             })()
           : null,
-      exercises:
-        exercises.status === 'fulfilled'
-          ? (exercises.value.dataPoints ?? [])
-              .map((point) => {
-                const exercise = point.exercise
-                if (!exercise) return null
-                const metrics = exercise.metricsSummary
-                const start = exercise.interval?.startTime
-                const end = exercise.interval?.endTime
-                return {
-                  id: point.name ?? `${start}-${exercise.displayName}`,
-                  name:
-                    exercise.displayName ?? exercise.exerciseType ?? 'Workout',
-                  type: exercise.exerciseType,
-                  start,
-                  end,
-                  durationSeconds:
-                    parseSeconds(exercise.activeDuration) ??
-                    durationSeconds(start, end),
-                  calories: metrics?.caloriesKcal,
-                  distanceMeters:
-                    metrics?.distanceMillimiters ??
-                    metrics?.distanceMillimeters,
-                  paceSecondsPerKm: metrics?.averagePaceSecondsPerMeter
-                    ? metrics.averagePaceSecondsPerMeter * 1000
-                    : undefined,
-                  averageHeartRate: metrics?.averageHeartRateBeatsPerMinute
-                    ? Number(metrics.averageHeartRateBeatsPerMinute)
-                    : undefined,
-                }
-              })
-              .filter(Boolean)
-          : [],
+      exercises: strava.available ? strava.exercises : googleExercises,
+      workoutSource: strava.available ? 'Strava' : 'Google Health',
+      strava: { available: strava.available },
       sleep:
         sleep.status === 'fulfilled'
           ? (sleep.value.dataPoints ?? [])
@@ -377,9 +454,17 @@ async function weather() {
   }
 }
 
-export async function getDashboardData() {
+export async function getDashboardData(options?: {
+  stravaRefreshToken?: string
+  onStravaRefresh?: (token: string) => void
+}) {
   const [calendarData, healthData, marketData, weatherData] = await Promise.all(
-    [calendar(), health(), markets(), weather()],
+    [
+      calendar(),
+      health(options?.stravaRefreshToken, options?.onStravaRefresh),
+      markets(),
+      weather(),
+    ],
   )
   return {
     calendar: calendarData,

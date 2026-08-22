@@ -40,6 +40,8 @@ type HealthData = {
     exercises?: Exercise[]
     sleep?: SleepSession[]
     sleepError?: string
+    workoutSource?: string
+    strava?: { available: boolean }
   }
 }
 
@@ -205,7 +207,15 @@ export default function HealthPage() {
                 <p className="eyebrow">RUNNING &amp; WORKOUTS</p>
                 <h2>Recent activity</h2>
               </div>
-              <Route size={19} />
+              {health?.strava?.available ? (
+                <span className="status-pill">
+                  <span /> Strava
+                </span>
+              ) : (
+                <a className="edit-button" href="/api/auth/strava">
+                  Connect Strava
+                </a>
+              )}
             </div>
             {health?.exercises?.length ? (
               <div className="workout-list">
@@ -247,8 +257,8 @@ export default function HealthPage() {
               </div>
             ) : (
               <p className="health-empty">
-                No exercise sessions were returned. Confirm that Health Connect
-                shares your activity records with Google Health.
+                Connect Strava to load your Garmin-synced workouts, including
+                pace, distance, calories, and heart rate.
               </p>
             )}
           </section>
