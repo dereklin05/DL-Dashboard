@@ -43,13 +43,8 @@ type Widget = {
 type Data = {
   calendar?: {
     available: boolean
-    events?: {
-      id: string
-      title: string
-      start?: string
-      end?: string
-      link?: string
-    }[]
+    events?: CalendarEvent[]
+    nextEvent?: CalendarEvent | null
   }
   health?: {
     available: boolean
@@ -83,6 +78,13 @@ type Data = {
     }
     hourly?: { temperature_2m?: number[]; precipitation_probability?: number[] }
   }
+}
+type CalendarEvent = {
+  id: string
+  title: string
+  start?: string
+  end?: string
+  link?: string
 }
 type LocalTransaction = {
   occurred_at: string
@@ -182,6 +184,7 @@ export default function Home() {
     day: 'numeric',
   }).format(new Date())
   const events = data?.calendar?.available ? (data.calendar.events ?? []) : [],
+    nextEvent = data?.calendar?.available ? data.calendar.nextEvent : undefined,
     quotes = data?.markets?.available ? (data.markets.quotes ?? []) : [],
     transactions = localTransactions,
     current = data?.weather?.available ? data.weather.current : undefined,
@@ -204,6 +207,13 @@ export default function Home() {
   const sleepDuration = sleepMinutes
     ? `${Math.floor(sleepMinutes / 60)}h ${sleepMinutes % 60}m`
     : '—'
+  const nextEventTime = nextEvent?.start
+    ? new Intl.DateTimeFormat('en-US', {
+        weekday: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(new Date(nextEvent.start))
+    : 'Calendar'
   const monthSpentCents = transactions.reduce(
     (total, transaction) => total + transaction.amount_cents,
     0,
@@ -372,9 +382,9 @@ export default function Home() {
               </span>
               <div>
                 <span>Next up</span>
-                <strong>{events[0]?.title ?? 'No upcoming events'}</strong>
+                <strong>{nextEvent?.title ?? 'No upcoming events'}</strong>
               </div>
-              <span className="signal-value">Calendar</span>
+              <span className="signal-value">{nextEventTime}</span>
             </div>
             <div className="signal-card">
               <span className="signal-icon orange">

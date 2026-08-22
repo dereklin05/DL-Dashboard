@@ -46,28 +46,48 @@ async function calendar() {
     const token = await googleAccessToken(
       process.env.GOOGLE_CALENDAR_REFRESH_TOKEN,
     )
-    const params = new URLSearchParams({
-      singleEvents: 'true',
-      orderBy: 'startTime',
-      timeMin: new Date().toISOString(),
-      timeMax: new Date(Date.now() + 86_400_000).toISOString(),
-      maxResults: '10',
+    const now = new Date()
+    const startOfToday = new Date(now)
+    startOfToday.setHours(0, 0, 0, 0)
+    const startOfTomorrow = new Date(startOfToday)
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1)
+    const eventsRequest = async (params: URLSearchParams) => {
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+        { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' },
+      )
+      if (!response.ok) throw new Error('Calendar request failed')
+      return response.json() as Promise<{ items?: GoogleEvent[] }>
+    }
+    const baseParams = { singleEvents: 'true', orderBy: 'startTime' }
+    const [todayData, nextData] = await Promise.all([
+      eventsRequest(
+        new URLSearchParams({
+          ...baseParams,
+          timeMin: startOfToday.toISOString(),
+          timeMax: startOfTomorrow.toISOString(),
+          maxResults: '10',
+        }),
+      ),
+      eventsRequest(
+        new URLSearchParams({
+          ...baseParams,
+          timeMin: now.toISOString(),
+          maxResults: '1',
+        }),
+      ),
+    ])
+    const normalize = (event: GoogleEvent) => ({
+      id: event.id,
+      title: event.summary || 'Untitled event',
+      start: event.start?.dateTime || event.start?.date,
+      end: event.end?.dateTime || event.end?.date,
+      link: event.htmlLink,
     })
-    const response = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
-      { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' },
-    )
-    if (!response.ok) throw new Error('Calendar request failed')
-    const data = (await response.json()) as { items?: GoogleEvent[] }
     return {
       available: true,
-      events: (data.items ?? []).map((event) => ({
-        id: event.id,
-        title: event.summary || 'Untitled event',
-        start: event.start?.dateTime || event.start?.date,
-        end: event.end?.dateTime || event.end?.date,
-        link: event.htmlLink,
-      })),
+      events: (todayData.items ?? []).map(normalize),
+      nextEvent: nextData.items?.[0] ? normalize(nextData.items[0]) : null,
     }
   } catch (error) {
     return unavailable(
