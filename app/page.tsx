@@ -55,6 +55,7 @@ type Data = {
     available: boolean
     steps?: Record<string, unknown>
     restingHeartRate?: Record<string, unknown>
+    sleep?: Array<{ durationSeconds?: number }>
   }
   markets?: {
     available: boolean
@@ -197,6 +198,12 @@ export default function Home() {
           { beatsPerMinuteAverage?: number } | undefined
       )?.beatsPerMinuteAverage ?? 0,
     )
+  const sleepMinutes = Math.round(
+    Number(data?.health?.sleep?.[0]?.durationSeconds ?? 0) / 60,
+  )
+  const sleepDuration = sleepMinutes
+    ? `${Math.floor(sleepMinutes / 60)}h ${sleepMinutes % 60}m`
+    : '—'
   const monthSpentCents = transactions.reduce(
     (total, transaction) => total + transaction.amount_cents,
     0,
@@ -293,9 +300,9 @@ export default function Home() {
           <button className="side-link active">
             <LayoutDashboard size={16} /> Overview
           </button>
-          <button className="side-link">
+          <a className="side-link" href="/health">
             <Activity size={16} /> Health & recovery
-          </button>
+          </a>
           <a className="side-link" href="/markets">
             <TrendingUp size={16} /> Markets
           </a>
@@ -395,7 +402,7 @@ export default function Home() {
                     <Header
                       icon={Watch}
                       eyebrow="Google Health"
-                      title="Today's activity"
+                      title="Today's health"
                     />
                     {!widget.collapsed &&
                       (data?.health?.available ? (
@@ -414,10 +421,13 @@ export default function Home() {
                                 <small>{heartRate ? 'bpm' : ''}</small>
                               </strong>
                             </div>
-                            <Empty>
-                              Metrics are sourced from Google Health; readiness
-                              is not inferred.
-                            </Empty>
+                            <div>
+                              <span>Sleep duration</span>
+                              <strong>{sleepDuration}</strong>
+                            </div>
+                            <a className="text-button" href="/health">
+                              View recovery details <ChevronRight size={14} />
+                            </a>
                           </div>
                         </div>
                       ) : (

@@ -108,15 +108,80 @@ async function healthRollup(token: string, dataType: string) {
   return response.json() as Promise<Record<string, unknown>>
 }
 
+type GoogleExercise = {
+  interval?: { startTime?: string; endTime?: string }
+  displayName?: string
+  exerciseType?: string
+  activeDuration?: string
+  metricsSummary?: {
+    caloriesKcal?: number
+    distanceMillimiters?: number
+    distanceMillimeters?: number
+    averagePaceSecondsPerMeter?: number
+    averageHeartRateBeatsPerMinute?: string
+  }
+}
+type GoogleSleep = {
+  interval?: { startTime?: string; endTime?: string }
+  stages?: Array<{
+    startTime?: string
+    endTime?: string
+    type?: string
+  }>
+}
+type GoogleDailyRestingHeartRate = { beatsPerMinute?: string }
+
+async function healthDataPoints(
+  token: string,
+  dataType: 'exercise' | 'sleep' | 'daily-resting-heart-rate',
+) {
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
+  const filter =
+    dataType === 'sleep'
+      ? `sleep.interval.end_time >= "${since}"`
+      : dataType === 'exercise'
+        ? `exercise.interval.start_time >= "${since}"`
+        : undefined
+  const params = new URLSearchParams({ pageSize: '25' })
+  if (filter) params.set('filter', filter)
+  const response = await fetch(
+    `https://health.googleapis.com/v4/users/me/dataTypes/${dataType}/dataPoints?${params}`,
+    { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' },
+  )
+  if (!response.ok) throw new Error(`${dataType} request failed`)
+  return response.json() as Promise<{
+    dataPoints?: Array<{
+      name?: string
+      exercise?: GoogleExercise
+      sleep?: GoogleSleep
+      dailyRestingHeartRate?: GoogleDailyRestingHeartRate
+    }>
+  }>
+}
+
+const durationSeconds = (start?: string, end?: string) => {
+  if (!start || !end) return undefined
+  const duration = (new Date(end).getTime() - new Date(start).getTime()) / 1000
+  return Number.isFinite(duration) && duration > 0
+    ? Math.round(duration)
+    : undefined
+}
+
+const parseSeconds = (value?: string) =>
+  value ? Number(value.replace(/s$/, '')) : undefined
+
 async function health() {
   try {
     const token = await googleAccessToken(
       process.env.GOOGLE_HEALTH_REFRESH_TOKEN,
     )
-    const [steps, restingHeartRate] = await Promise.allSettled([
-      healthRollup(token, 'steps'),
-      healthRollup(token, 'daily-resting-heart-rate'),
-    ])
+    const [steps, restingHeartRate, exercises, sleep] =
+      await Promise.allSettled([
+        healthRollup(token, 'steps'),
+        healthDataPoints(token, 'daily-resting-heart-rate'),
+        healthDataPoints(token, 'exercise'),
+        healthDataPoints(token, 'sleep'),
+      ])
     const last = (value: PromiseSettledResult<Record<string, unknown>>) =>
       value.status === 'fulfilled'
         ? ((
@@ -127,7 +192,82 @@ async function health() {
     return {
       available: true,
       steps: last(steps),
-      restingHeartRate: last(restingHeartRate),
+      restingHeartRate:
+        restingHeartRate.status === 'fulfilled'
+          ? (() => {
+              const measurement = restingHeartRate.value.dataPoints?.find(
+                (point) => point.dailyRestingHeartRate?.beatsPerMinute,
+              )?.dailyRestingHeartRate
+              return measurement
+                ? {
+                    restingHeartRate: {
+                      beatsPerMinuteAverage: Number(measurement.beatsPerMinute),
+                    },
+                  }
+                : null
+            })()
+          : null,
+      exercises:
+        exercises.status === 'fulfilled'
+          ? (exercises.value.dataPoints ?? [])
+              .map((point) => {
+                const exercise = point.exercise
+                if (!exercise) return null
+                const metrics = exercise.metricsSummary
+                const start = exercise.interval?.startTime
+                const end = exercise.interval?.endTime
+                return {
+                  id: point.name ?? `${start}-${exercise.displayName}`,
+                  name:
+                    exercise.displayName ?? exercise.exerciseType ?? 'Workout',
+                  type: exercise.exerciseType,
+                  start,
+                  end,
+                  durationSeconds:
+                    parseSeconds(exercise.activeDuration) ??
+                    durationSeconds(start, end),
+                  calories: metrics?.caloriesKcal,
+                  distanceMeters:
+                    metrics?.distanceMillimiters ??
+                    metrics?.distanceMillimeters,
+                  paceSecondsPerKm: metrics?.averagePaceSecondsPerMeter
+                    ? metrics.averagePaceSecondsPerMeter * 1000
+                    : undefined,
+                  averageHeartRate: metrics?.averageHeartRateBeatsPerMinute
+                    ? Number(metrics.averageHeartRateBeatsPerMinute)
+                    : undefined,
+                }
+              })
+              .filter(Boolean)
+          : [],
+      sleep:
+        sleep.status === 'fulfilled'
+          ? (sleep.value.dataPoints ?? [])
+              .map((point) => {
+                const session = point.sleep
+                if (!session) return null
+                const start = session.interval?.startTime
+                const end = session.interval?.endTime
+                return {
+                  id: point.name ?? `${start}-${end}`,
+                  start,
+                  end,
+                  durationSeconds: durationSeconds(start, end),
+                  stages: (session.stages ?? []).map((stage) => ({
+                    type: stage.type ?? 'UNKNOWN',
+                    durationSeconds: durationSeconds(
+                      stage.startTime,
+                      stage.endTime,
+                    ),
+                  })),
+                }
+              })
+              .filter(Boolean)
+          : [],
+      sleepError:
+        sleep.status === 'rejected'
+          ? 'Add the Google Health sleep scope and refresh your token to load sleep sessions.'
+          : undefined,
     }
   } catch (error) {
     return unavailable(
