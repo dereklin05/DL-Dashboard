@@ -946,6 +946,10 @@ small {
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
+.widget-expenses .transactions {
+  margin-top: 0;
+  border-top: 0;
+}
 .minus-budget-header > div:first-child strong {
   font-size: 20px;
 }

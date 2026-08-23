@@ -122,6 +122,11 @@ const time = (date?: string) =>
         minute: '2-digit',
       }).format(new Date(date))
     : 'All day'
+const expenseDate = (date: string) =>
+  new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date(date))
 const weatherCondition = (code?: number) => {
   if (code === undefined) return 'Weather unavailable'
   if (code === 0) return 'Sunny'
@@ -739,9 +744,7 @@ export default function Home() {
                                 </span>
                                 <span>
                                   <strong>{t.merchant}</strong>
-                                  <small>
-                                    {t.occurred_at} · {t.category}
-                                  </small>
+                                  <small>{expenseDate(t.occurred_at)}</small>
                                 </span>
                                 <b>-{money(t.amount_cents)}</b>
                               </div>
