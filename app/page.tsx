@@ -75,8 +75,10 @@ type Data = {
       temperature_2m?: number
       apparent_temperature?: number
       wind_speed_10m?: number
+      weather_code?: number
     }
     hourly?: { temperature_2m?: number[]; precipitation_probability?: number[] }
+    daily?: { temperature_2m_max?: number[]; temperature_2m_min?: number[] }
   }
 }
 type CalendarEvent = {
@@ -117,6 +119,18 @@ const time = (date?: string) =>
         minute: '2-digit',
       }).format(new Date(date))
     : 'All day'
+const weatherCondition = (code?: number) => {
+  if (code === undefined) return 'Weather unavailable'
+  if (code === 0) return 'Sunny'
+  if ([1, 2].includes(code)) return 'Partly cloudy'
+  if (code === 3) return 'Cloudy'
+  if ([45, 48].includes(code)) return 'Foggy'
+  if ([51, 53, 55, 56, 57].includes(code)) return 'Drizzle'
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return 'Rainy'
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Snowy'
+  if ([95, 96, 99].includes(code)) return 'Thunderstorms'
+  return 'Cloudy'
+}
 function Header({
   icon: Icon,
   eyebrow,
@@ -191,6 +205,9 @@ export default function Home() {
     hourly = data?.weather?.available
       ? (data.weather.hourly?.temperature_2m?.slice(0, 10) ?? [])
       : []
+  const high = data?.weather?.daily?.temperature_2m_max?.[0]
+  const low = data?.weather?.daily?.temperature_2m_min?.[0]
+  const weatherSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${data?.weather?.location ?? 'local'} weather`)}`
   const steps = Number(
       (data?.health?.steps?.steps as { countSum?: string } | undefined)
         ?.countSum ?? 0,
@@ -386,22 +403,30 @@ export default function Home() {
               </div>
               <span className="signal-value">{nextEventTime}</span>
             </div>
-            <div className="signal-card">
+            <a
+              className="signal-card weather-link"
+              href={weatherSearchUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Search Google for the local weather"
+            >
               <span className="signal-icon orange">
                 <CloudSun size={16} />
               </span>
               <div>
-                <span>Outside</span>
+                <span>{weatherCondition(current?.weather_code)}</span>
                 <strong>
                   {current?.temperature_2m === undefined
                     ? 'Weather unavailable'
-                    : `${Math.round(current.temperature_2m)}° · Live`}
+                    : `${Math.round(current.temperature_2m)}°`}
                 </strong>
               </div>
               <span className="signal-value">
-                {data?.weather?.location ?? '—'}
+                {high === undefined || low === undefined
+                  ? 'Google weather'
+                  : `H ${Math.round(high)}° · L ${Math.round(low)}°`}
               </span>
-            </div>
+            </a>
           </div>
           <div className="widget-grid">
             {visible.map((widget) => {

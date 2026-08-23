@@ -454,6 +454,7 @@ async function weather() {
       current:
         'temperature_2m,apparent_temperature,wind_speed_10m,weather_code',
       hourly: 'temperature_2m,precipitation_probability',
+      daily: 'temperature_2m_max,temperature_2m_min',
       forecast_days: '1',
       timezone: process.env.WEATHER_TIMEZONE || 'America/Toronto',
     })

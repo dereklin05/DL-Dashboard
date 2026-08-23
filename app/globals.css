@@ -477,6 +477,17 @@ h2 {
   font-size: 12px;
   margin-top: 3px;
 }
+.weather-link {
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+.weather-link:hover {
+  border-color: color-mix(in srgb, var(--orange) 65%, var(--border));
+  background: var(--muted);
+  transform: translateY(-1px);
+}
 .signal-value {
   color: var(--muted-foreground);
   font-size: 10px;
