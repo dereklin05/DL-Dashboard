@@ -12,6 +12,7 @@ import {
   Route,
 } from 'lucide-react'
 import { ThemeMenu, useDashboardTheme } from '@/components/theme-menu'
+import { SignOutButton } from '@/components/sign-out-button'
 
 type Exercise = {
   id: string
@@ -127,6 +128,7 @@ export default function HealthPage() {
             <span className="live-dot" /> Google Health
           </span>
           <ThemeMenu theme={theme} onThemeChange={setTheme} />
+          <SignOutButton />
         </div>
       </header>
       <div className="health-dashboard">

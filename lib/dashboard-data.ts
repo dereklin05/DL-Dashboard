@@ -373,16 +373,19 @@ async function health(
   }
 }
 
-async function markets() {
+async function markets(symbolOverrides?: string[]) {
   const apiKey = process.env.TWELVE_DATA_API_KEY
   if (!apiKey) return unavailable('Twelve Data is not configured')
   try {
     const symbols = (
-      process.env.MARKET_SYMBOLS ||
-      'SNDK,QQQ,SPY,AVGO,LITE,PLTR,MSFT,AMD,ZEB,INTC,AAPL,AMZN,APLD,META,NVDA'
+      symbolOverrides?.length
+        ? symbolOverrides
+        : (
+            process.env.MARKET_SYMBOLS ||
+            'SNDK,QQQ,SPY,AVGO,LITE,PLTR,MSFT,AMD,ZEB,INTC,AAPL,AMZN,APLD,META,NVDA'
+          ).split(',')
     )
-      .split(',')
-      .map((symbol) => symbol.trim())
+      .map((symbol) => symbol.trim().toUpperCase())
       .filter(Boolean)
     const visibleSymbols = symbols.slice(0, 8)
     const results = await Promise.allSettled(
@@ -478,12 +481,13 @@ async function weather() {
 export async function getDashboardData(options?: {
   stravaRefreshToken?: string
   onStravaRefresh?: (token: string) => void
+  marketSymbols?: string[]
 }) {
   const [calendarData, healthData, marketData, weatherData] = await Promise.all(
     [
       calendar(),
       health(options?.stravaRefreshToken, options?.onStravaRefresh),
-      markets(),
+      markets(options?.marketSymbols),
       weather(),
     ],
   )

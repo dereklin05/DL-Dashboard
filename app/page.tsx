@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { ThemeMenu, useDashboardTheme } from '@/components/theme-menu'
-import { getMinusData } from '@/lib/minus-data'
+import { SignOutButton } from '@/components/sign-out-button'
+import { getMinusData, type MinusBudget } from '@/lib/minus-data'
 import {
   Activity,
   ArrowDownRight,
@@ -96,6 +97,7 @@ type LocalTransaction = {
   amount_cents: number
 }
 const expenseStorageKey = 'dl-dashboard-minus-transactions'
+const dailyStepGoal = 10_000
 const initial: Widget[] = [
   ['readiness', 'Health'],
   ['calendar', 'Schedule'],
@@ -110,7 +112,7 @@ const initial: Widget[] = [
   collapsed: false,
 }))
 const money = (cents: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+  new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(
     cents / 100,
   )
 const time = (date?: string) =>
@@ -175,28 +177,63 @@ export default function Home() {
     [localTransactions, setLocalTransactions] = useState<LocalTransaction[]>(
       [],
     ),
+    [minusBudget, setMinusBudget] = useState<MinusBudget | undefined>(),
     [error, setError] = useState(''),
     [importNote, setImportNote] = useState('')
   useEffect(() => {
-    getMinusData()
-      .then(({ transactions }) => {
-        if (transactions.length) {
-          setLocalTransactions(
-            transactions.map((transaction) => ({
-              occurred_at: transaction.date,
-              merchant: transaction.category,
-              category: transaction.category,
-              amount_cents: transaction.amountCents,
-            })),
-          )
-          return
-        }
-        const saved = JSON.parse(
-          localStorage.getItem(expenseStorageKey) ?? '[]',
-        )
-        if (Array.isArray(saved)) setLocalTransactions(saved)
-      })
-      .catch(() => undefined)
+    fetch('/api/finance', { cache: 'no-store' })
+      .then((response) =>
+        response.ok ? response.json() : Promise.reject(new Error('No sync')),
+      )
+      .then(
+        (payload: {
+          transactions: Array<{
+            date: string
+            category: string
+            amountCents: number
+          }>
+          budget?: MinusBudget
+        }) => {
+          const { transactions, budget } = payload
+          setMinusBudget(budget)
+          if (transactions.length) {
+            setLocalTransactions(
+              transactions.map((transaction) => ({
+                occurred_at: transaction.date,
+                merchant: transaction.category,
+                category: transaction.category,
+                amount_cents: transaction.amountCents,
+              })),
+            )
+            return
+          }
+        },
+      )
+      .catch(() =>
+        getMinusData()
+          .then(({ transactions, budget }) => {
+            setMinusBudget(budget)
+            if (transactions.length)
+              setLocalTransactions(
+                transactions.map((transaction) => ({
+                  occurred_at: transaction.date,
+                  merchant: transaction.category,
+                  category: transaction.category,
+                  amount_cents: transaction.amountCents,
+                })),
+              )
+          })
+          .catch(() => {
+            try {
+              const saved = JSON.parse(
+                localStorage.getItem(expenseStorageKey) ?? '[]',
+              )
+              if (Array.isArray(saved)) setLocalTransactions(saved)
+            } catch {
+              localStorage.removeItem(expenseStorageKey)
+            }
+          }),
+      )
     fetch('/api/dashboard')
       .then(async (r) =>
         r.ok ? r.json() : Promise.reject((await r.json()).error),
@@ -232,6 +269,7 @@ export default function Home() {
           { beatsPerMinuteAverage?: number } | undefined
       )?.beatsPerMinuteAverage ?? 0,
     )
+  const stepProgress = Math.min(100, Math.round((steps / dailyStepGoal) * 100))
   const sleepMinutes = Math.round(
     Number(data?.health?.sleep?.[0]?.durationSeconds ?? 0) / 60,
   )
@@ -245,10 +283,44 @@ export default function Home() {
         minute: '2-digit',
       }).format(new Date(nextEvent.start))
     : 'Calendar'
-  const monthSpentCents = transactions.reduce(
+  const budgetPeriodTransactions = transactions.filter((transaction) => {
+    if (!minusBudget?.startDate || !minusBudget.endDate) return true
+    return (
+      transaction.occurred_at >= minusBudget.startDate &&
+      transaction.occurred_at < minusBudget.endDate
+    )
+  })
+  const periodSpentCents = budgetPeriodTransactions.reduce(
     (total, transaction) => total + transaction.amount_cents,
     0,
   )
+  const budgetCents = minusBudget?.totalCents
+  const budgetLeftCents =
+    budgetCents === undefined ? undefined : budgetCents - periodSpentCents
+  const budgetLeftPercent =
+    budgetCents !== undefined &&
+    budgetCents > 0 &&
+    budgetLeftCents !== undefined
+      ? Math.max(0, Math.round((budgetLeftCents / budgetCents) * 100))
+      : undefined
+  const daysInBudgetPeriod = minusBudget?.startDate
+    ? Math.max(
+        1,
+        Math.floor(
+          (Math.min(
+            Date.now(),
+            minusBudget.endDate
+              ? new Date(minusBudget.endDate).getTime()
+              : Date.now(),
+          ) -
+            new Date(minusBudget.startDate).getTime()) /
+            86_400_000,
+        ) + 1,
+      )
+    : undefined
+  const dailyAverageCents = daysInBudgetPeriod
+    ? Math.round(periodSpentCents / daysInBudgetPeriod)
+    : undefined
   const visible = useMemo(() => widgets.filter((x) => x.visible), [widgets])
   const patch = (id: WidgetId, value: Partial<Widget>) =>
     setWidgets((all) => all.map((x) => (x.id === id ? { ...x, ...value } : x)))
@@ -333,6 +405,7 @@ export default function Home() {
             <b>{data ? 'Live' : 'Loading'}</b>
           </div>
           <ThemeMenu theme={theme} onThemeChange={setTheme} />
+          <SignOutButton />
         </div>
       </header>
       <div className="dashboard-body">
@@ -451,10 +524,22 @@ export default function Home() {
                     {!widget.collapsed &&
                       (data?.health?.available ? (
                         <div className="readiness-layout">
-                          <div className="battery-ring">
+                          <div
+                            className="battery-ring"
+                            role="progressbar"
+                            aria-label="Daily step goal progress"
+                            aria-valuemin={0}
+                            aria-valuemax={dailyStepGoal}
+                            aria-valuenow={Math.min(steps, dailyStepGoal)}
+                            style={
+                              {
+                                '--step-progress': `${stepProgress * 3.6}deg`,
+                              } as React.CSSProperties
+                            }
+                          >
                             <div>
                               <strong>{steps.toLocaleString()}</strong>
-                              <span>steps today</span>
+                              <span>{stepProgress}% of 10k goal</span>
                             </div>
                           </div>
                           <div className="readiness-metrics">
@@ -606,7 +691,7 @@ export default function Home() {
                   <>
                     <Header
                       icon={CircleDollarSign}
-                      eyebrow="Minus / this browser"
+                      eyebrow="Minus / synced"
                       title="Spend with intention"
                       action={
                         <a className="text-button" href="/finance">
@@ -617,10 +702,23 @@ export default function Home() {
                     {!widget.collapsed && (
                       <>
                         {transactions.length ? (
-                          <div className="budget-header">
+                          <div className="budget-header minus-budget-header">
                             <div>
-                              <span>This browser&apos;s imported spending</span>
-                              <strong>{money(monthSpentCents)}</strong>
+                              <span>Spent this budget period</span>
+                              <strong>
+                                {money(periodSpentCents)}
+                                {budgetCents !== undefined && (
+                                  <small> of {money(budgetCents)}</small>
+                                )}
+                              </strong>
+                            </div>
+                            <div className="minus-budget-remaining">
+                              <strong>
+                                {budgetLeftPercent === undefined
+                                  ? '—'
+                                  : `${budgetLeftPercent}%`}
+                              </strong>
+                              <span>budget left</span>
                             </div>
                           </div>
                         ) : (
@@ -630,7 +728,7 @@ export default function Home() {
                         )}
                         {transactions.length > 0 && (
                           <div className="transactions">
-                            {transactions.map((t, i) => (
+                            {transactions.slice(0, 4).map((t, i) => (
                               <div key={`${t.occurred_at}-${i}`}>
                                 <span className="transaction-icon">
                                   {i % 2 ? (
@@ -648,6 +746,16 @@ export default function Home() {
                                 <b>-{money(t.amount_cents)}</b>
                               </div>
                             ))}
+                          </div>
+                        )}
+                        {transactions.length > 0 && (
+                          <div className="minus-daily-average">
+                            <span>Daily average</span>
+                            <strong>
+                              {dailyAverageCents === undefined
+                                ? '—'
+                                : money(dailyAverageCents)}
+                            </strong>
                           </div>
                         )}
                       </>

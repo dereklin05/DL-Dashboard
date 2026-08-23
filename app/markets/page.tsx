@@ -5,10 +5,13 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   ChevronLeft,
+  GripVertical,
+  Plus,
   RefreshCw,
   TrendingUp,
 } from 'lucide-react'
 import { ThemeMenu, useDashboardTheme } from '@/components/theme-menu'
+import { SignOutButton } from '@/components/sign-out-button'
 
 type Quote = {
   symbol: string
@@ -26,6 +29,11 @@ type MarketData = {
   }
   fetchedAt?: string
 }
+type WatchlistItem = {
+  symbol: string
+  visible: boolean
+  position?: number
+}
 
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -42,14 +50,26 @@ export default function MarketsPage() {
   const [data, setData] = useState<MarketData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
+  const [symbolToAdd, setSymbolToAdd] = useState('')
+  const [watchlistNote, setWatchlistNote] = useState('')
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/dashboard')
+      const [response, watchlistResponse] = await Promise.all([
+        fetch('/api/dashboard'),
+        fetch('/api/watchlist', { cache: 'no-store' }),
+      ])
       const body = await response.json()
       if (!response.ok)
         throw new Error(body.error || 'Market data is unavailable')
       setData(body)
+      if (watchlistResponse.ok) {
+        const watchlistBody = await watchlistResponse.json()
+        setWatchlist(watchlistBody.watchlist ?? [])
+      }
       setError('')
     } catch (cause) {
       setError(
@@ -79,6 +99,58 @@ export default function MarketsPage() {
         second: '2-digit',
       }).format(new Date(data.fetchedAt))
     : '—'
+  const visibleCount = Math.min(8, watchlist.length)
+  const saveWatchlist = async (nextWatchlist: WatchlistItem[]) => {
+    const normalized = nextWatchlist.map((item, index) => ({
+      ...item,
+      visible: index < 8,
+    }))
+    setWatchlist(normalized)
+    setWatchlistNote('Saving…')
+    try {
+      const response = await fetch('/api/watchlist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchlist: normalized }),
+      })
+      const body = await response.json()
+      if (!response.ok)
+        throw new Error(body.error || 'Could not save watchlist')
+      setWatchlist(body.watchlist ?? normalized)
+      setWatchlistNote('Saved')
+      load()
+    } catch (cause) {
+      setWatchlistNote(
+        cause instanceof Error ? cause.message : 'Could not save watchlist',
+      )
+    }
+  }
+  const addSymbol = () => {
+    const symbol = symbolToAdd.trim().toUpperCase()
+    if (!/^[A-Z0-9.:-]{1,20}$/.test(symbol))
+      return setWatchlistNote('Enter a valid ticker symbol.')
+    if (watchlist.some((item) => item.symbol === symbol))
+      return setWatchlistNote(`${symbol} is already in your watchlist.`)
+    saveWatchlist([...watchlist, { symbol, visible: false }])
+    setSymbolToAdd('')
+  }
+  const dropAt = (targetIndex: number) => {
+    if (draggedIndex === null || draggedIndex === targetIndex) return
+    const next = [...watchlist]
+    const [moved] = next.splice(draggedIndex, 1)
+    next.splice(targetIndex, 0, moved)
+    saveWatchlist(next)
+    setDraggedIndex(null)
+    setDropIndex(null)
+  }
+  const removeDraggedSymbol = () => {
+    if (draggedIndex === null) return
+    const symbol = watchlist[draggedIndex]?.symbol
+    saveWatchlist(watchlist.filter((_, index) => index !== draggedIndex))
+    setWatchlistNote(symbol ? `${symbol} removed from your watchlist.` : '')
+    setDraggedIndex(null)
+    setDropIndex(null)
+  }
 
   return (
     <main className={`dashboard theme-${theme}`}>
@@ -97,6 +169,7 @@ export default function MarketsPage() {
             <span className="live-dot" /> Updated {updated}
           </span>
           <ThemeMenu theme={theme} onThemeChange={setTheme} />
+          <SignOutButton />
           <button className="edit-button" onClick={load} disabled={loading}>
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />{' '}
             Refresh
@@ -161,17 +234,69 @@ export default function MarketsPage() {
           </div>
           <div className="market-stat">
             <span>Watchlist</span>
-            <strong>{data?.markets?.configuredSymbols ?? 0}</strong>
-            <small>configured symbols</small>
+            <strong>{watchlist.length}</strong>
+            <small>{visibleCount} shown on dashboard</small>
           </div>
         </section>
-        {data?.markets?.limited && (
-          <p className="market-limit">
-            Your current Twelve Data plan allows eight quote credits per minute.
-            The first eight `MARKET_SYMBOLS` are displayed; reorder that setting
-            to choose which ones appear.
-          </p>
-        )}
+        <section className="watchlist-panel">
+          <div className="watchlist-heading">
+            <div>
+              <p className="eyebrow">WATCHLIST MANAGER</p>
+              <h2>Order your dashboard watchlist</h2>
+            </div>
+            <span>First 8 are shown</span>
+          </div>
+          <div className="watchlist-add">
+            <input
+              value={symbolToAdd}
+              onChange={(event) => setSymbolToAdd(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  addSymbol()
+                }
+              }}
+              placeholder="Add ticker, e.g. TSLA"
+              aria-label="Ticker symbol"
+            />
+            <button className="edit-button" type="button" onClick={addSymbol}>
+              <Plus size={15} /> Add
+            </button>
+          </div>
+          {watchlistNote && <p className="watchlist-note">{watchlistNote}</p>}
+          <div className="watchlist-items">
+            {watchlist.map((item, index) => (
+              <div
+                className={`watchlist-item ${index < 8 ? 'is-shown' : ''} ${dropIndex === index ? 'is-drop-target' : ''}`}
+                key={item.symbol}
+                draggable
+                onDragStart={() => setDraggedIndex(index)}
+                onDragEnd={() => {
+                  setDraggedIndex(null)
+                  setDropIndex(null)
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDragEnter={() => setDropIndex(index)}
+                onDrop={() => dropAt(index)}
+              >
+                <GripVertical className="watchlist-grip" size={16} />
+                <strong>{item.symbol}</strong>
+                <span
+                  className={`watchlist-position ${index < 8 ? 'is-visible' : ''}`}
+                >
+                  {index < 8 ? `Shown · #${index + 1}` : 'Hidden'}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div
+            className={`watchlist-removal ${draggedIndex !== null ? 'is-active' : ''}`}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={removeDraggedSymbol}
+          >
+            Drop a ticker here to remove it from your watchlist
+          </div>
+        </section>
         <section className="quote-grid">
           {quotes.map((quote) => {
             const change = Number(quote.change_ratio ?? 0)

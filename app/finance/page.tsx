@@ -13,9 +13,9 @@ import {
   TrendingDown,
 } from 'lucide-react'
 import { ThemeMenu, useDashboardTheme } from '@/components/theme-menu'
+import { SignOutButton } from '@/components/sign-out-button'
 import {
   getMinusData,
-  saveMinusImport,
   type MinusBudget,
   type MinusData,
   type MinusTransaction,
@@ -58,9 +58,14 @@ export default function FinancePage() {
 
   const load = useCallback(async () => {
     try {
-      setMinus(await getMinusData())
+      const response = await fetch('/api/finance', { cache: 'no-store' })
+      if (!response.ok) throw new Error((await response.json()).error)
+      setMinus(await response.json())
     } catch {
-      setNote('Could not read your locally imported Minus data.')
+      setMinus(await getMinusData())
+      setNote(
+        'Supabase is not ready yet, so this browser is showing its local copy.',
+      )
     }
   }, [])
   useEffect(() => {
@@ -110,9 +115,14 @@ export default function FinancePage() {
         : undefined
       if (!transactions.length)
         throw new Error('No Minus transactions were found in this file.')
-      await saveMinusImport(transactions, budget)
+      const response = await fetch('/api/finance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions, budget }),
+      })
+      if (!response.ok) throw new Error((await response.json()).error)
       await load()
-      setNote(`Merged ${transactions.length} Minus expenses from ${file.name}.`)
+      setNote(`Synced ${transactions.length} Minus expenses from ${file.name}.`)
     } catch (error) {
       setNote(
         error instanceof Error
@@ -184,6 +194,7 @@ export default function FinancePage() {
         </a>
         <div className="top-actions">
           <ThemeMenu theme={theme} onThemeChange={setTheme} />
+          <SignOutButton />
         </div>
       </header>
       <div className="finance-dashboard">
@@ -197,7 +208,7 @@ export default function FinancePage() {
               Spend with intention<span className="accent-dot">.</span>
             </h1>
             <p className="subheading">
-              Private browser-only mirror of your Minus exports.
+              Private synced mirror of your Minus exports.
             </p>
           </div>
           <label className="edit-button finance-import">
@@ -220,7 +231,8 @@ export default function FinancePage() {
             <h2>Import a Minus backup</h2>
             <p>
               Upload the XLSX or CSV backup exported from Minus. Your records
-              stay in this browser and future imports merge by transaction ID.
+              sync securely to your account and future imports merge by
+              transaction ID.
             </p>
           </section>
         ) : (
@@ -297,7 +309,7 @@ export default function FinancePage() {
                 <span className="signal-value">
                   {minus.lastImportedAt
                     ? `Updated ${dateFormat.format(new Date(minus.lastImportedAt))}`
-                    : 'Local only'}
+                    : 'Synced'}
                 </span>
               </div>
               <div className="finance-transaction-list">

@@ -51,6 +51,93 @@ select {
 button {
   cursor: pointer;
 }
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 70% 5%, #a995ff20, transparent 24rem),
+    var(--background);
+}
+.login-card {
+  width: min(100%, 390px);
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 20px 60px #0003;
+}
+.login-mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 25px;
+  border-radius: 12px;
+  color: #111609;
+  background: var(--primary);
+}
+.login-card h1 {
+  margin: 5px 0 8px;
+  font-size: 30px;
+  letter-spacing: -0.045em;
+}
+.login-card > p:not(.eyebrow):not(.login-error) {
+  margin: 0 0 24px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.login-card label {
+  display: grid;
+  gap: 7px;
+  margin: 15px 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.login-card input {
+  width: 100%;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: 0;
+  padding: 0 11px;
+  color: var(--foreground);
+  background: var(--muted);
+}
+.login-card input:focus {
+  border-color: var(--lime);
+}
+.login-submit {
+  width: 100%;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 8px;
+  color: #111609;
+  background: var(--primary);
+  font-weight: 700;
+}
+.login-switch {
+  display: block;
+  width: 100%;
+  margin-top: 15px;
+  border: 0;
+  color: var(--lime);
+  background: transparent;
+  font-size: 12px;
+}
+.login-error {
+  margin: 14px 0 0;
+  color: var(--coral);
+  font-size: 12px;
+  line-height: 1.45;
+}
 
 .dashboard {
   --lime: #c8f36a;
@@ -629,7 +716,10 @@ h2 {
   border-radius: 50%;
   background:
     radial-gradient(circle at center, var(--card) 58%, transparent 59%),
-    conic-gradient(var(--lime) 0deg 295deg, var(--border) 295deg 360deg);
+    conic-gradient(
+      var(--lime) 0deg var(--step-progress, 0deg),
+      var(--border) var(--step-progress, 0deg) 360deg
+    );
 }
 .battery-ring div {
   text-align: center;
@@ -851,6 +941,39 @@ small {
   display: flex;
   justify-content: space-between;
   align-items: end;
+}
+.minus-budget-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.minus-budget-header > div:first-child strong {
+  font-size: 20px;
+}
+.minus-budget-header small {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 400;
+}
+.minus-budget-remaining {
+  text-align: right;
+}
+.minus-budget-remaining strong {
+  color: var(--lime);
+}
+.minus-daily-average {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+}
+.minus-daily-average span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+.minus-daily-average strong {
+  font-size: 11px;
 }
 .budget-percent {
   color: var(--lime) !important;
@@ -1666,6 +1789,115 @@ small {
 .market-empty h2 {
   margin: 14px 0 7px;
   color: var(--foreground);
+}
+.watchlist-panel {
+  margin: 18px 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.watchlist-heading,
+.watchlist-add,
+.watchlist-item {
+  display: flex;
+  align-items: center;
+}
+.watchlist-heading {
+  justify-content: space-between;
+  gap: 16px;
+}
+.watchlist-heading h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.03em;
+}
+.watchlist-heading > span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.watchlist-add {
+  gap: 9px;
+  margin: 17px 0 10px;
+}
+.watchlist-add input {
+  min-width: 0;
+  flex: 1;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: 0;
+  padding: 0 10px;
+  color: var(--foreground);
+  background: var(--muted);
+  font-size: 12px;
+}
+.watchlist-add input:focus {
+  border-color: var(--lime);
+}
+.watchlist-note {
+  margin: 0 0 10px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.watchlist-items {
+  display: grid;
+  gap: 7px;
+}
+.watchlist-item {
+  min-width: 0;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  cursor: grab;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+.watchlist-item:active {
+  cursor: grabbing;
+}
+.watchlist-item.is-shown {
+  border-color: color-mix(in srgb, var(--lime) 40%, var(--border));
+}
+.watchlist-item.is-drop-target {
+  transform: translateY(2px);
+  border-color: var(--lime);
+}
+.watchlist-item > strong {
+  min-width: 42px;
+  font-size: 12px;
+}
+.watchlist-grip {
+  color: var(--muted-foreground);
+}
+.watchlist-position {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+.watchlist-position.is-visible {
+  color: var(--lime);
+}
+.watchlist-removal {
+  margin-top: 11px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  text-align: center;
+  font-size: 11px;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease;
+}
+.watchlist-removal.is-active {
+  border-color: var(--coral);
+  color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 8%, transparent);
 }
 .mobile-menu {
   display: none;
