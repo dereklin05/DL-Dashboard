@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { ThemeMenu, useDashboardTheme } from '@/components/theme-menu'
+import { getMinusData } from '@/lib/minus-data'
 import {
   Activity,
   ArrowDownRight,
@@ -177,12 +178,25 @@ export default function Home() {
     [error, setError] = useState(''),
     [importNote, setImportNote] = useState('')
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(expenseStorageKey) ?? '[]')
-      if (Array.isArray(saved)) setLocalTransactions(saved)
-    } catch {
-      localStorage.removeItem(expenseStorageKey)
-    }
+    getMinusData()
+      .then(({ transactions }) => {
+        if (transactions.length) {
+          setLocalTransactions(
+            transactions.map((transaction) => ({
+              occurred_at: transaction.date,
+              merchant: transaction.category,
+              category: transaction.category,
+              amount_cents: transaction.amountCents,
+            })),
+          )
+          return
+        }
+        const saved = JSON.parse(
+          localStorage.getItem(expenseStorageKey) ?? '[]',
+        )
+        if (Array.isArray(saved)) setLocalTransactions(saved)
+      })
+      .catch(() => undefined)
     fetch('/api/dashboard')
       .then(async (r) =>
         r.ok ? r.json() : Promise.reject((await r.json()).error),
@@ -333,6 +347,9 @@ export default function Home() {
           <a className="side-link" href="/markets">
             <TrendingUp size={16} /> Markets
           </a>
+          <a className="side-link" href="/finance">
+            <CircleDollarSign size={16} /> Finances
+          </a>
           <button className="side-link">
             <CalendarDays size={16} /> Calendar
           </button>
@@ -357,17 +374,9 @@ export default function Home() {
               <p className="subheading">Your real data, in one clear view.</p>
             </div>
             <div className="heading-actions">
-              <label className="edit-button">
-                <Plus size={16} /> Import Minus CSV
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  hidden
-                  onChange={(e) =>
-                    e.target.files?.[0] && importCsv(e.target.files[0])
-                  }
-                />
-              </label>
+              <a className="edit-button" href="/finance">
+                <Plus size={16} /> Open Minus finances
+              </a>
               <button
                 className="edit-button"
                 onClick={() => setCustomizing(true)}
@@ -597,13 +606,17 @@ export default function Home() {
                   <>
                     <Header
                       icon={CircleDollarSign}
-                      eyebrow="Minus CSV / this browser"
+                      eyebrow="Minus / this browser"
                       title="Spend with intention"
-                      action={<MoreHorizontal size={18} />}
+                      action={
+                        <a className="text-button" href="/finance">
+                          Open <ChevronRight size={14} />
+                        </a>
+                      }
                     />
                     {!widget.collapsed && (
                       <>
-                        {data?.expenses?.available ? (
+                        {transactions.length ? (
                           <div className="budget-header">
                             <div>
                               <span>This browser&apos;s imported spending</span>
@@ -612,7 +625,7 @@ export default function Home() {
                           </div>
                         ) : (
                           <Empty>
-                            Import a Minus CSV to store it in this browser.
+                            Open Finances to import a Minus XLSX or CSV backup.
                           </Empty>
                         )}
                         {transactions.length > 0 && (
@@ -665,11 +678,8 @@ export default function Home() {
                           {data?.markets?.available
                             ? 'connected'
                             : 'not connected'}{' '}
-                          · Minus/D1:{' '}
-                          {data?.expenses?.available
-                            ? 'connected'
-                            : 'not connected'}
-                          .
+                          · Minus:{' '}
+                          {transactions.length ? 'connected' : 'not connected'}.
                         </p>
                       </div>
                     )}
