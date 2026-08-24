@@ -261,8 +261,6 @@ export default function Home() {
     hourly = data?.weather?.available
       ? (data.weather.hourly?.temperature_2m?.slice(0, 10) ?? [])
       : []
-  const high = data?.weather?.daily?.temperature_2m_max?.[0]
-  const low = data?.weather?.daily?.temperature_2m_min?.[0]
   const weatherSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${data?.weather?.location ?? 'local'} weather`)}`
   const steps = Number(
       (data?.health?.steps?.steps as { countSum?: string } | undefined)
@@ -501,17 +499,17 @@ export default function Home() {
                 <CloudSun size={16} />
               </span>
               <div>
-                <span>{weatherCondition(current?.weather_code)}</span>
+                <span>{data?.weather?.location ?? 'Weather'}</span>
                 <strong>
                   {current?.temperature_2m === undefined
                     ? 'Weather unavailable'
-                    : `${Math.round(current.temperature_2m)}°`}
+                    : `${Math.round(current.temperature_2m)}° · ${weatherCondition(current.weather_code)}`}
                 </strong>
               </div>
               <span className="signal-value">
-                {high === undefined || low === undefined
-                  ? 'Google weather'
-                  : `H ${Math.round(high)}° · L ${Math.round(low)}°`}
+                {current?.apparent_temperature === undefined
+                  ? 'Feels like —'
+                  : `Feels like ${Math.round(current.apparent_temperature)}°`}
               </span>
             </a>
           </div>
